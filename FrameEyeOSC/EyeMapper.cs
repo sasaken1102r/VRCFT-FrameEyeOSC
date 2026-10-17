@@ -54,7 +54,7 @@ public static class EyeMapper
     public const float RelaxedEyelid = 0.75f;
 
     /// <summary>
-    /// Width in mm of VRCFT's dilation range: eyecam's default pupil-to-iris ratio 0.60..1.05 of a 5.9 mm iris radius.
+    /// Default width in mm of VRCFT's dilation range: eyecam's pupil-to-iris ratio 0.60..1.05 of a 5.9 mm iris radius.
     /// </summary>
     public const float DilationRangeMm = 2.655f;
 
@@ -110,7 +110,7 @@ public static class EyeMapper
     /// <summary>
     /// Maps the pupils while at least one eye has PUPIL (an eye without it takes the other eye's values). The dilation
     /// range is placed around the mean diameter A so that VRCFT's <c>(A - min) / (max - min)</c> is the mean dilation D:
-    /// <c>min = A - D * S</c>, <c>max = min + S</c>.
+    /// <c>min = A - D * S</c>, <c>max = min + S</c>. If that round trip loses precision, a power-of-two range recovers D.
     /// </summary>
     /// <param name="packet">A parsed packet.</param>
     /// <returns>The pupil values, or null when neither eye has PUPIL.</returns>
@@ -124,12 +124,38 @@ public static class EyeMapper
         var left = hasLeft ? packet.Left : packet.Right;
         var right = hasRight ? packet.Right : packet.Left;
 
-        // Halves first so huge (but finite) diameters can't overflow to infinity.
-        var meanMm = left.PupilMm * 0.5f + right.PupilMm * 0.5f;
+        // Match Combined's arithmetic, retaining finite bounds even if pathological input overflows its sum.
+        var meanMm = (left.PupilMm + right.PupilMm) * 0.5f;
+        var finiteMean = float.IsFinite(meanMm);
+        if (!finiteMean)
+            meanMm = left.PupilMm * 0.5f + right.PupilMm * 0.5f;
         var meanDilation = (Math.Clamp(left.PupilDilation, 0f, 1f) + Math.Clamp(right.PupilDilation, 0f, 1f)) * 0.5f;
         var min = meanMm - meanDilation * DilationRangeMm;
+        var max = min + DilationRangeMm;
+
+        if (finiteMean && meanMm >= 0f && meanDilation > 0f && (meanMm - min) / (max - min) != meanDilation)
+        {
+            // Scaling by a power of two preserves D's bits. Put D * range between A and 2A so min <= 0 and
+            // A - min recovers that scaled value exactly; (min + range) - min then rounds back to range.
+            var range = meanMm == 0f ? 1f : MathF.ScaleB(1f, MathF.ILogB(meanMm) - MathF.ILogB(meanDilation));
+            var scaled = meanDilation * range;
+            if (scaled < meanMm)
+            {
+                range *= 2f;
+                scaled *= 2f;
+            }
+            var exactMin = meanMm - scaled;
+            var exactMax = exactMin + range;
+            // Extreme finite protocol inputs can overflow the required range. Keep the original valid bounds then.
+            if (float.IsFinite(exactMin) && float.IsFinite(exactMax) &&
+                (meanMm - exactMin) / (exactMax - exactMin) == meanDilation)
+            {
+                min = exactMin;
+                max = exactMax;
+            }
+        }
 
         // max >= min always: VRCFT drops the whole eye update otherwise.
-        return new MappedPupils(left.PupilMm, right.PupilMm, min, min + DilationRangeMm);
+        return new MappedPupils(left.PupilMm, right.PupilMm, min, max);
     }
 }
