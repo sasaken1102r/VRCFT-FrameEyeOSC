@@ -60,7 +60,7 @@ public sealed class FrameEyeOscReceiver : IDisposable
     public int Port { get; }
 
     /// <summary>Whether any packet has been accepted.</summary>
-    public bool HasReceived { get; private set; }
+    public bool HasReceived => _filter.HasNewest;
 
     /// <summary>The sender of the newest accepted packet.</summary>
     public IPEndPoint? LastSender { get; private set; }
@@ -93,11 +93,11 @@ public sealed class FrameEyeOscReceiver : IDisposable
             // do/while: a zero-length datagram makes Poll report readable while Available stays 0; it must still be read.
             do
             {
-                EndPoint from = new IPEndPoint(IPAddress.Any, 0);
                 int length;
+                IPEndPoint sender;
                 try
                 {
-                    length = _socket.ReceiveFrom(_buffer, ref from);
+                    length = _socket.ReceiveFrom(_buffer, out sender);
                     received++;
                 }
                 catch (SocketException e) when (!_disposed)
@@ -110,7 +110,6 @@ public sealed class FrameEyeOscReceiver : IDisposable
                     continue;
                 }
 
-                var sender = (IPEndPoint)from;
                 if (!FeoPacket.TryParse(_buffer.AsSpan(0, length), out var packet, out var error))
                 {
                     ReportBadPacket(error!, sender);
@@ -121,7 +120,6 @@ public sealed class FrameEyeOscReceiver : IDisposable
 
                 newest = packet;
                 LastSender = sender;
-                HasReceived = true;
                 _lastAcceptedTimestamp = _time.GetTimestamp();
             }
             while (++count < MaxDatagramsPerPoll && _socket.Available > 0);

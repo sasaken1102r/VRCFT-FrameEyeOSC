@@ -73,9 +73,7 @@ public class EyeMapperTests
         var pupils = Assert.NotNull(frame.Pupils);
         Assert.Equal(4.0f, pupils.LeftMm);
         Assert.Equal(3.5f, pupils.RightMm);
-        // A = 3.75, D = 0.5 -> min = 3.75 - 0.5 * 2.655
-        Assert.Equal(3.75f - 0.5f * EyeMapper.DilationRangeMm, pupils.MinDilation, Tol);
-        Assert.Equal(pupils.MinDilation + EyeMapper.DilationRangeMm, pupils.MaxDilation, Tol);
+        Assert.Equal(0.5f, Normalized(pupils));
     }
 
     [Fact]
@@ -86,7 +84,7 @@ public class EyeMapperTests
         var pupils = Assert.NotNull(p);
         Assert.Equal(3f, pupils.LeftMm);
         Assert.Equal(5f, pupils.RightMm);
-        Assert.Equal(0.4f, Normalized(pupils), 1e-5f);
+        Assert.Equal(0.4f, Normalized(pupils));
     }
 
     [Theory]
@@ -103,7 +101,7 @@ public class EyeMapperTests
         var pupils = Assert.NotNull(EyeMapper.MapPupils(packet));
         Assert.Equal(4.2f, pupils.LeftMm);
         Assert.Equal(4.2f, pupils.RightMm);
-        Assert.Equal(0.7f, Normalized(pupils), 1e-5f);
+        Assert.Equal(0.7f, Normalized(pupils));
     }
 
     [Fact]
@@ -126,9 +124,71 @@ public class EyeMapperTests
             Eye(mm: leftMm, dil: leftD), Eye(mm: rightMm, dil: rightD))));
 
         var expected = (Math.Clamp(leftD, 0f, 1f) + Math.Clamp(rightD, 0f, 1f)) / 2f;
-        Assert.Equal(expected, Normalized(pupils), 1e-5f);
+        Assert.Equal(expected, Normalized(pupils));
+        Assert.Equal(leftMm, pupils.LeftMm);
+        Assert.Equal(rightMm, pupils.RightMm);
+        Assert.True(float.IsFinite(pupils.MinDilation) && float.IsFinite(pupils.MaxDilation));
         Assert.True(pupils.MaxDilation >= pupils.MinDilation);
-        Assert.Equal(EyeMapper.DilationRangeMm, pupils.MaxDilation - pupils.MinDilation, 1e-5f);
+    }
+
+    [Theory]
+    [InlineData(4f, 0.5f)]
+    [InlineData(7.8814774f, 0.73437494f)]
+    [InlineData(2f, 0.062499996f)]
+    [InlineData(6.6048956f, 0.49999997f)]
+    [InlineData(0f, 0.49999997f)]
+    public void Pupil_normalization_keeps_values_on_their_original_threshold_side(float mm, float dilation)
+    {
+        var pupils = Assert.NotNull(EyeMapper.MapPupils(Packet(FeoFlags.Tracking | FeoFlags.LeftPupil | FeoFlags.RightPupil,
+            Eye(mm: mm, dil: dilation), Eye(mm: mm, dil: dilation))));
+
+        Assert.Equal(dilation, Normalized(pupils));
+        Assert.Equal(mm, pupils.LeftMm);
+        Assert.Equal(mm, pupils.RightMm);
+    }
+
+    [Theory]
+    [InlineData(4f, 0f)]
+    [InlineData(0f, 0.5f)]
+    public void Default_pupil_range_stays_when_it_already_normalizes_exactly(float mm, float dilation)
+    {
+        var pupils = Assert.NotNull(EyeMapper.MapPupils(Packet(FeoFlags.Tracking | FeoFlags.LeftPupil | FeoFlags.RightPupil,
+            Eye(mm: mm, dil: dilation), Eye(mm: mm, dil: dilation))));
+        var min = mm - dilation * EyeMapper.DilationRangeMm;
+
+        Assert.Equal(min, pupils.MinDilation);
+        Assert.Equal(min + EyeMapper.DilationRangeMm, pupils.MaxDilation);
+        Assert.Equal(dilation, Normalized(pupils));
+    }
+
+    [Fact]
+    public void Unrepresentably_small_dilation_keeps_a_finite_usable_range()
+    {
+        var pupils = Assert.NotNull(EyeMapper.MapPupils(Packet(FeoFlags.Tracking | FeoFlags.LeftPupil | FeoFlags.RightPupil,
+            Eye(mm: 4f, dil: float.Epsilon), Eye(mm: 4f, dil: float.Epsilon))));
+
+        Assert.Equal(4f, pupils.LeftMm);
+        Assert.Equal(4f, pupils.RightMm);
+        Assert.True(float.IsFinite(pupils.MinDilation) && float.IsFinite(pupils.MaxDilation));
+        Assert.True(pupils.MaxDilation > pupils.MinDilation);
+        Assert.InRange(Normalized(pupils), 0f, 1e-6f);
+    }
+
+    [Fact]
+    public void Exact_pupil_ranges_do_not_use_the_Steam_IPC_invalid_float_sentinel()
+    {
+        var dilation = MathF.ScaleB(1f, -30);
+        foreach (var d in new[] { MathF.BitDecrement(dilation), dilation, MathF.BitIncrement(dilation) })
+        {
+            var pupils = Assert.NotNull(EyeMapper.MapPupils(Packet(FeoFlags.Tracking | FeoFlags.LeftPupil | FeoFlags.RightPupil,
+                Eye(mm: 4f, dil: d), Eye(mm: 4f, dil: d))));
+
+            Assert.Equal(d, Normalized(pupils));
+            Assert.NotEqual((float)uint.MaxValue, pupils.MinDilation);
+            Assert.NotEqual((float)uint.MaxValue, pupils.MaxDilation);
+            Assert.Equal(4f, pupils.LeftMm);
+            Assert.Equal(4f, pupils.RightMm);
+        }
     }
 
     [Theory]
