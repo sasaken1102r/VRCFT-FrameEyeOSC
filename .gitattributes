@@ -1,0 +1,4 @@
+# Normalize text line endings; keep binaries untouched.
+* text=auto
+*.dll binary
+*.png binary

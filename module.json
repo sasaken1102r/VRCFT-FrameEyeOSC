@@ -1,0 +1,16 @@
+{
+  "ModuleId": "103a993c-383f-4a7a-8cc6-5e8b4bf0d133",
+  "AuthorName": "sasaken@",
+  "DllFileName": "FrameEyeOSC.dll",
+  "Downloads": 0,
+  "DownloadUrl": "",
+  "LastUpdated": "2026-10-15T00:00:00Z",
+  "ModuleDescription": "Steam Frame eye tracking via frameeyeosc: gaze, eyelids incl. wide eyes, squint and pupils.",
+  "ModuleName": "FrameEyeOSC",
+  "ModulePageUrl": "https://github.com/sasaken1102r/VRCFT-FrameEyeOSC",
+  "Rating": 0,
+  "Ratings": 0,
+  "RatingSum": 0,
+  "UsageInstructions": "Run frameeyeosc on the Steam Frame with its output set to \"VRCFT (FrameEyeOSC)\" and this PC's IP address, and allow UDP port 11112 in this PC's firewall.",
+  "Version": "1.0.0"
+}
