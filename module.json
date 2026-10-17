@@ -12,5 +12,5 @@
   "Ratings": 0,
   "RatingSum": 0,
   "UsageInstructions": "Run frameeyeosc on the Steam Frame with its output set to \"VRCFT (FrameEyeOSC)\" and this PC's IP address, and allow UDP port 11112 in this PC's firewall.",
-  "Version": "1.0.0"
+  "Version": "1.0.1"
 }
