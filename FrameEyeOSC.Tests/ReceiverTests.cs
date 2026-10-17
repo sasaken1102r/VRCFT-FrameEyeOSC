@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -80,6 +81,52 @@ public sealed class ReceiverTests : IDisposable
         Assert.NotNull(p);
         Assert.Equal((1u, 2u), (p.Value.Sequence, p.Value.Session));
         Assert.Equal(0.3f, p.Value.Left.GazeX);
+    }
+
+    [Fact]
+    public void Sender_endpoints_remain_snapshots_when_the_source_changes()
+    {
+        var target = new IPEndPoint(IPAddress.Loopback, _receiver.Port);
+        using var other = new UdpClient(AddressFamily.InterNetwork);
+
+        _sender.Send(Packet(1), target);
+        Assert.Equal(1u, _receiver.Poll(TimeSpan.FromSeconds(1))?.Sequence);
+        var first = _receiver.LastSender!;
+        var firstPort = ((IPEndPoint)_sender.Client.LocalEndPoint!).Port;
+
+        other.Send(Packet(2), target);
+        Assert.Equal(2u, _receiver.Poll(TimeSpan.FromSeconds(1))?.Sequence);
+        var second = _receiver.LastSender!;
+        var secondPort = ((IPEndPoint)other.Client.LocalEndPoint!).Port;
+        Assert.Equal(firstPort, first.Port);
+        Assert.Equal(secondPort, second.Port);
+        Assert.NotSame(first, second);
+
+        // A rejected datagram must neither replace the accepted sender nor change an endpoint already reported.
+        _sender.Send("bad"u8.ToArray(), target);
+        Assert.Null(_receiver.Poll(TimeSpan.FromSeconds(1)));
+        Assert.Same(second, _receiver.LastSender);
+        Assert.Equal(secondPort, second.Port);
+        var badSender = Assert.Single(_bad).Sender;
+        Assert.Equal(firstPort, badSender.Port);
+
+        other.Send(Packet(3), target);
+        Assert.Equal(3u, _receiver.Poll(TimeSpan.FromSeconds(1))?.Sequence);
+        Assert.Equal(firstPort, badSender.Port);
+        Assert.Equal(secondPort, _receiver.LastSender!.Port);
+    }
+
+    [Fact]
+    public void A_maximum_IPv4_datagram_keeps_compatible_appended_fields()
+    {
+        const int maxPayload = 65507; // IPv4's maximum packet minus its 20-byte IP and 8-byte UDP headers.
+        var bytes = new byte[maxPayload];
+        Packet(1).CopyTo(bytes, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), maxPayload);
+
+        _sender.Send(bytes, new IPEndPoint(IPAddress.Loopback, _receiver.Port));
+        Assert.Equal(1u, _receiver.Poll(TimeSpan.FromSeconds(1))?.Sequence);
+        Assert.Empty(_bad);
     }
 
     [Fact]

@@ -18,14 +18,17 @@ internal interface IDatagramSocket : IDisposable
     /// <summary>Waits up to <paramref name="wait"/> until a read won't block (<see cref="Socket.Poll(TimeSpan, SelectMode)"/>).</summary>
     bool Poll(TimeSpan wait);
 
-    /// <summary>Reads one datagram (<see cref="Socket.ReceiveFrom(byte[], ref EndPoint)"/>).</summary>
-    int ReceiveFrom(byte[] buffer, ref EndPoint from);
+    /// <summary>Reads one datagram and its sender.</summary>
+    int ReceiveFrom(byte[] buffer, out IPEndPoint from);
 }
 
 /// <summary>A UDP socket bound exclusively on every IPv4 interface.</summary>
 internal sealed class UdpDatagramSocket : IDatagramSocket
 {
     private readonly Socket _socket;
+    private SocketAddress _receivedAddress = new(AddressFamily.InterNetwork);
+    private SocketAddress _senderAddress = new(AddressFamily.InterNetwork);
+    private IPEndPoint _sender = new(IPAddress.Any, 0);
 
     /// <summary>Binds <paramref name="port"/>.</summary>
     /// <param name="port">The port; 0 picks a free one.</param>
@@ -52,7 +55,21 @@ internal sealed class UdpDatagramSocket : IDatagramSocket
 
     public bool Poll(TimeSpan wait) => _socket.Poll(wait, SelectMode.SelectRead);
 
-    public int ReceiveFrom(byte[] buffer, ref EndPoint from) => _socket.ReceiveFrom(buffer, ref from);
+    public int ReceiveFrom(byte[] buffer, out IPEndPoint from)
+    {
+        // The EndPoint overload allocates a SocketAddress and endpoint for every packet. Receive into reusable
+        // addresses instead; keep each published endpoint intact when a different sender takes over.
+        // A failed receive can shorten Size, so restore its capacity before the next native call.
+        _receivedAddress.Size = _receivedAddress.Buffer.Length;
+        var length = _socket.ReceiveFrom(buffer, SocketFlags.None, _receivedAddress);
+        if (!_receivedAddress.Equals(_senderAddress))
+        {
+            _sender = (IPEndPoint)_sender.Create(_receivedAddress);
+            (_receivedAddress, _senderAddress) = (_senderAddress, _receivedAddress);
+        }
+        from = _sender;
+        return length;
+    }
 
     public void Dispose() => _socket.Dispose();
 }

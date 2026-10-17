@@ -53,9 +53,10 @@ internal sealed class FakeDatagramSocket : IDatagramSocket
         return StuckError is not null || FloodError is not null || _queue.Count > 0;
     }
 
-    public int ReceiveFrom(byte[] buffer, ref EndPoint from)
+    public int ReceiveFrom(byte[] buffer, out IPEndPoint from)
     {
         Reads++;
+        from = Sender;
         if ((StuckError ?? FloodError) is { } error)
             throw error;
         switch (_queue.Dequeue())
@@ -64,7 +65,6 @@ internal sealed class FakeDatagramSocket : IDatagramSocket
                 throw e;
             case byte[] datagram:
                 datagram.CopyTo(buffer, 0);
-                from = Sender;
                 return datagram.Length;
             default:
                 throw new InvalidOperationException();
