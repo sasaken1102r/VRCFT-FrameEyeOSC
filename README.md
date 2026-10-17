@@ -9,7 +9,7 @@ There is no per-avatar pupil format to choose: whatever eye parameters the avata
 
 ## Install
 
-https://github.com/user-attachments/assets/bde65197-9626-49c5-a299-8d532993e714
+https://github.com/user-attachments/assets/26cb8d00-7d2f-42d0-bd32-6adb9ee3a4d2
 
 1. Download `FrameEyeOSC_<version>.zip` from [Releases](https://github.com/sasaken1102r/VRCFT-FrameEyeOSC/releases).
 2. In VRCFT, open **Module Registry** and press **Install from .zip**, then pick the zip. VRCFT puts the module in its
@@ -147,7 +147,7 @@ Steam Frame のアイトラッキング用の VRCFaceTracking（VRCFT）モジ�
 
 ### 入れ方
 
-https://github.com/user-attachments/assets/be0bd327-802d-40eb-8294-38b236ffe3a4
+https://github.com/user-attachments/assets/0bdac22b-ff27-4906-836f-179af25f0db0
 
 1. [Releases](https://github.com/sasaken1102r/VRCFT-FrameEyeOSC/releases) から `FrameEyeOSC_<版>.zip` を落とします。
 2. VRCFT の **Module Registry** を開いて **Install from .zip** を押し、その zip を選びます。VRCFT が `CustomLibs`
