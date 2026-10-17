@@ -174,6 +174,23 @@ public class EyeMapperTests
         Assert.InRange(Normalized(pupils), 0f, 1e-6f);
     }
 
+    [Fact]
+    public void Exact_pupil_ranges_do_not_use_the_Steam_IPC_invalid_float_sentinel()
+    {
+        var dilation = MathF.ScaleB(1f, -30);
+        foreach (var d in new[] { MathF.BitDecrement(dilation), dilation, MathF.BitIncrement(dilation) })
+        {
+            var pupils = Assert.NotNull(EyeMapper.MapPupils(Packet(FeoFlags.Tracking | FeoFlags.LeftPupil | FeoFlags.RightPupil,
+                Eye(mm: 4f, dil: d), Eye(mm: 4f, dil: d))));
+
+            Assert.Equal(d, Normalized(pupils));
+            Assert.NotEqual((float)uint.MaxValue, pupils.MinDilation);
+            Assert.NotEqual((float)uint.MaxValue, pupils.MaxDilation);
+            Assert.Equal(4f, pupils.LeftMm);
+            Assert.Equal(4f, pupils.RightMm);
+        }
+    }
+
     [Theory]
     [InlineData(0f)]
     [InlineData(1e-7f)]

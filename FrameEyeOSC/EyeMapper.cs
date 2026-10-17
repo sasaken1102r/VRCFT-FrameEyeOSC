@@ -146,8 +146,17 @@ public static class EyeMapper
             }
             var exactMin = meanMm - scaled;
             var exactMax = exactMin + range;
+            // Steam VRCFT's IPC reserves numeric uint.MaxValue as "unset". Try a wider range if a bound hits it.
+            if (exactMin == (float)uint.MaxValue || exactMax == (float)uint.MaxValue)
+            {
+                range *= 2f;
+                scaled *= 2f;
+                exactMin = meanMm - scaled;
+                exactMax = exactMin + range;
+            }
             // Extreme finite protocol inputs can overflow the required range. Keep the original valid bounds then.
             if (float.IsFinite(exactMin) && float.IsFinite(exactMax) &&
+                exactMin != (float)uint.MaxValue && exactMax != (float)uint.MaxValue &&
                 (meanMm - exactMin) / (exactMax - exactMin) == meanDilation)
             {
                 min = exactMin;
