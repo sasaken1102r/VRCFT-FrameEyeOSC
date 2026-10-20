@@ -7,12 +7,16 @@ namespace FrameEyeOSC;
 /// the defaults; the module never writes it.
 /// </summary>
 /// <param name="Port">The UDP port to listen on.</param>
-public sealed record FrameEyeOscConfig(int Port)
+/// <param name="ClaimWithoutPackets">
+/// Take VRCFT's eye tracking slot even when no packet arrives while VRCFT starts. Off (the default): without packets the
+/// slot is left to other eye modules, e.g. one for a different headset.
+/// </param>
+public sealed record FrameEyeOscConfig(int Port, bool ClaimWithoutPackets = false)
 {
     /// <summary>The config file name.</summary>
     public const string FileName = "FrameEyeOSCConfig.json";
 
-    /// <summary>The defaults (port 11112).</summary>
+    /// <summary>The defaults (port 11112, eyes only with packets).</summary>
     public static FrameEyeOscConfig Default { get; } = new(FrameEyeOscReceiver.DefaultPort);
 
     /// <summary>Reads the config, falling back to the defaults for a missing file and, with a warning, a bad one.</summary>
@@ -31,12 +35,15 @@ public sealed record FrameEyeOscConfig(int Port)
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            warning = $"could not read {FileName} ({e.Message}); using port {Default.Port}";
+            warning = $"could not read {FileName} ({e.Message}); using the defaults";
             return Default;
         }
     }
 
-    /// <summary>Parses the config JSON. Unknown properties are ignored; a missing <c>port</c> keeps the default.</summary>
+    /// <summary>
+    /// Parses the config JSON. Unknown properties are ignored; a missing <c>port</c> or <c>claimWithoutPackets</c> keeps
+    /// its default.
+    /// </summary>
     /// <param name="json">The file's text.</param>
     /// <param name="warning">Why the text was not used, or null.</param>
     /// <returns>The parsed config, or the defaults when the text is invalid.</returns>
@@ -52,27 +59,38 @@ public sealed record FrameEyeOscConfig(int Port)
             });
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                warning = $"{FileName} is not a JSON object; using port {Default.Port}";
+                warning = $"{FileName} is not a JSON object; using the defaults";
                 return Default;
             }
 
+            var config = Default;
             foreach (var property in doc.RootElement.EnumerateObject())
             {
-                if (!string.Equals(property.Name, "port", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetInt32(out var port) ||
-                    port is < 1 or > 65535)
+                if (string.Equals(property.Name, "port", StringComparison.OrdinalIgnoreCase))
                 {
-                    warning = $"\"port\" in {FileName} must be a whole number 1-65535; using port {Default.Port}";
-                    return Default;
+                    if (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetInt32(out var port) ||
+                        port is < 1 or > 65535)
+                    {
+                        warning = $"\"port\" in {FileName} must be a whole number 1-65535; using the defaults";
+                        return Default;
+                    }
+                    config = config with { Port = port };
                 }
-                return new FrameEyeOscConfig(port);
+                else if (string.Equals(property.Name, "claimWithoutPackets", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    {
+                        warning = $"\"claimWithoutPackets\" in {FileName} must be true or false; using the defaults";
+                        return Default;
+                    }
+                    config = config with { ClaimWithoutPackets = property.Value.GetBoolean() };
+                }
             }
-            return Default;
+            return config;
         }
         catch (JsonException e)
         {
-            warning = $"{FileName} is not valid JSON ({e.Message}); using port {Default.Port}";
+            warning = $"{FileName} is not valid JSON ({e.Message}); using the defaults";
             return Default;
         }
     }
