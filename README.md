@@ -53,16 +53,25 @@ match this PC. The module's log lists this PC's IPv4 addresses when it starts.
 Turn off Steam Link's own OSC output on the PC (SteamVR settings > Steam Link > OSC), or it fights VRCFT over the
 avatar's eyes.
 
+VRCFT gives the eyes to the first module that takes them and never hands them to another module later. FrameEyeOSC
+takes them at once, so frameeyeosc can start before or after VRCFT. If you also use another headset's eye module
+(e.g. PICO 4 Pro), set `"claimWithoutPackets": false` (see below) so that module can drive the eyes while the Steam
+Frame is off.
+
 ## Config (optional)
 
-To use another port, create `FrameEyeOSCConfig.json` next to `FrameEyeOSC.dll`:
+To use another port, or to leave the eyes to another headset's module while the Steam Frame is off, create
+`FrameEyeOSCConfig.json` next to `FrameEyeOSC.dll`:
 
 ```json
-{ "port": 11112 }
+{ "port": 11112, "claimWithoutPackets": true }
 ```
 
-Without the file the module uses 11112; it never writes the file itself. A file it can't read is reported in the log
-and the defaults are used. Change frameeyeosc's port setting to the same number.
+Without the file the module uses 11112 and takes the eyes at once; it never writes the file itself. With
+`"claimWithoutPackets": false` it takes the eyes only when a packet from frameeyeosc arrives within 5 s of VRCFT
+starting; without one it logs "No packets from frameeyeosc within 5 s" and leaves the eyes to other modules. Then start
+frameeyeosc before VRCFT (or restart VRCFT after starting it). A file it can't read is reported in the log and the
+defaults are used. Change frameeyeosc's port setting to the same number.
 
 When installed with "Install from .zip", the DLL is in the module's own folder:
 - Windows: `%APPDATA%\VRCFaceTracking\CustomLibs\103a993c-383f-4a7a-8cc6-5e8b4bf0d133\`
@@ -98,6 +107,8 @@ The full packet format and mapping are in [docs/protocol.md](docs/protocol.md).
   frameeyeosc's other outputs, so only one source drives the eyes.
 - **"VRCFT has no eye tracking slot for FrameEyeOSC"**: another eye module took the eyes first. Turn off or remove that
   module, then restart VRCFT.
+- **"No packets from frameeyeosc within 5 s"** (with `"claimWithoutPackets": false`): frameeyeosc wasn't sending when
+  VRCFT started, so the eyes were left to other modules (or none). Start frameeyeosc, then restart VRCFT.
 - **"Ignoring a datagram …"**: something else sends to the port, or frameeyeosc and the module don't speak the same
   packet version; update both.
 
@@ -190,16 +201,25 @@ Steam Frame の frameeyeosc のパネルで、送り先に **VRCFT（FrameEyeOSC
 PC 側の Steam Link 自身の OSC 出力（SteamVR の設定 > Steam Link > OSC）はオフにしてください。オンのままだと
 VRCFT と取り合いになります。
 
+VRCFT は目を最初に受け持ったモジュールに任せ、あとから他のモジュールに渡しません。FrameEyeOSC はすぐに目を
+受け持つので、frameeyeosc は VRCFT の前に起動しても後に起動しても動きます。別のヘッドセットの目のモジュール
+（PICO 4 Pro など）も使うときは、Steam Frame を使わない間はそのモジュールが目を動かせるように
+`"claimWithoutPackets": false` にしてください（下の設定ファイル）。
+
 ### 設定ファイル（任意）
 
-ポートを変えるときは `FrameEyeOSC.dll` と同じフォルダーに `FrameEyeOSCConfig.json` を作ります。
+ポートを変えるとき、または Steam Frame を使わない間は目を別のヘッドセットのモジュールに任せたいときは、
+`FrameEyeOSC.dll` と同じフォルダーに `FrameEyeOSCConfig.json` を作ります。
 
 ```json
-{ "port": 11112 }
+{ "port": 11112, "claimWithoutPackets": true }
 ```
 
-ファイルが無ければ 11112 を使います（モジュールがファイルを書くことはありません）。読めないファイルはログに
-警告を出して既定値を使います。frameeyeosc のポート設定も同じ番号にしてください。
+ファイルが無ければ 11112 を使い、すぐに目を受け持ちます（モジュールがファイルを書くことはありません）。
+`"claimWithoutPackets": false` にすると、VRCFT の起動から 5 秒以内に frameeyeosc のパケットが届いたときだけ目を受け持ちます。
+届かなければ「No packets from frameeyeosc within 5 s」とログに出して目を他のモジュールに任せます。このときは
+frameeyeosc を VRCFT より先に起動してください（後から起動したときは VRCFT を再起動します）。読めないファイルは
+ログに警告を出して既定値を使います。frameeyeosc のポート設定も同じ番号にしてください。
 
 「Install from .zip」で入れたときは、DLL はモジュール用のフォルダーにあります:
 - Windows: `%APPDATA%\VRCFaceTracking\CustomLibs\103a993c-383f-4a7a-8cc6-5e8b4bf0d133\`
@@ -233,6 +253,9 @@ VRCFT と取り合いになります。
   オフにして、目を動かすのが一つだけになるようにしてください。
 - **「VRCFT has no eye tracking slot for FrameEyeOSC」**: 他の目のモジュールが先に目を受け持っています。そのモジュールを
   オフにするか削除して、VRCFT を再起動してください。
+- **「No packets from frameeyeosc within 5 s」**（`"claimWithoutPackets": false` のとき）: VRCFT の起動時に frameeyeosc
+  が送っていなかったので、目は他のモジュールに任せました（無ければ目は動きません）。frameeyeosc を起動してから VRCFT
+  を再起動してください。
 - **「Ignoring a datagram …」**: 他の何かがそのポートに送っているか、frameeyeosc とモジュールのパケットの版が
   合っていません。両方を新しくしてください。
 

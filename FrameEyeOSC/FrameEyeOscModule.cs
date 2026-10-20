@@ -17,6 +17,12 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
     // Short enough that Update returns regularly with no packets; VRCFT calls it again in a loop.
     private static readonly TimeSpan PollWait = TimeSpan.FromMilliseconds(50);
 
+    /// <summary>
+    /// How long Initialize waits for frameeyeosc before leaving the eye tracking slot to other modules. VRCFT gives the
+    /// slot to the first module that claims it and never moves it to another one later.
+    /// </summary>
+    internal static readonly TimeSpan DefaultStartupWait = TimeSpan.FromSeconds(5);
+
     private FrameEyeOscReceiver? _receiver;
     private IPEndPoint? _loggedSender;
     private bool? _lastTracking;
@@ -28,6 +34,9 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
     /// <summary>Opens the receiver on a port; tests swap in one over a fake socket.</summary>
     internal Func<int, Action<string, IPEndPoint>, FrameEyeOscReceiver> CreateReceiver { get; init; } =
         (port, onBadPacket) => new FrameEyeOscReceiver(port, onBadPacket);
+
+    /// <summary>How long Initialize waits for the first packet; tests shorten it.</summary>
+    internal TimeSpan StartupWait { get; init; } = DefaultStartupWait;
 
     /// <inheritdoc />
     public override (bool SupportsEye, bool SupportsExpression) Supported => (true, false);
@@ -48,7 +57,8 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
 
         var config = LoadConfig();
 
-        // Bind now but don't wait for packets: VRCFT kills a module process that stays silent for 60 s in Initialize.
+        // Bind now, and wait for packets only briefly (see below): VRCFT kills a module process that stays silent for 60 s
+        // in Initialize.
         try
         {
             _receiver = CreateReceiver(config.Port, OnBadPacket);
@@ -82,7 +92,49 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
             _receiver.Port, string.Join(", ", GetLocalIPv4Addresses().DefaultIfEmpty("(none found)")));
 
         _writer.Write(UnifiedTracking.Data, EyeFrame.Neutral);
+
+        // With claimWithoutPackets off and no frameeyeosc (the Steam Frame is off or another headset is in use), leave the
+        // eyes to other modules.
+        if (!config.ClaimWithoutPackets && !WaitForFirstPacket(_receiver))
+        {
+            Logger.LogInformation(
+                "No packets from frameeyeosc within {Seconds} s, so the eye tracking slot is left to other modules. To use " +
+                "the Steam Frame, start frameeyeosc and then restart VRCFT (or set \"claimWithoutPackets\": true in {ConfigFile}).",
+                StartupWait.TotalSeconds, FrameEyeOscConfig.FileName);
+            Teardown();
+            return (false, false);
+        }
+
         return (true, false);
+    }
+
+    /// <summary>Polls until a packet arrives (applying it) or <see cref="StartupWait"/> passes.</summary>
+    /// <returns>Whether a packet arrived.</returns>
+    private bool WaitForFirstPacket(FrameEyeOscReceiver receiver)
+    {
+        var waitUntil = Environment.TickCount64 + (long)StartupWait.TotalMilliseconds;
+        while (true)
+        {
+            var left = waitUntil - Environment.TickCount64;
+            try
+            {
+                if (receiver.Poll(TimeSpan.FromMilliseconds(Math.Clamp(left, 0, (long)PollWait.TotalMilliseconds))) is { } packet)
+                {
+                    OnPacket(receiver, packet);
+                    return true;
+                }
+            }
+            catch (SocketException e)
+            {
+                if (e.Message != _lastUpdateError)
+                    Logger.LogError(e, "Waiting for frameeyeosc failed.");
+                _lastUpdateError = e.Message;
+                if (left > 0)
+                    Thread.Sleep(PollWait);
+            }
+            if (left <= 0)
+                return false;
+        }
     }
 
     /// <inheritdoc />
@@ -183,7 +235,8 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
         if (warning is not null)
             Logger.LogWarning("{Warning}", warning);
         else if (config != FrameEyeOscConfig.Default)
-            Logger.LogInformation("Using {ConfigFile}: port {Port}.", FrameEyeOscConfig.FileName, config.Port);
+            Logger.LogInformation("Using {ConfigFile}: port {Port}, claimWithoutPackets {Claim}.",
+                FrameEyeOscConfig.FileName, config.Port, config.ClaimWithoutPackets);
         return config;
     }
 
