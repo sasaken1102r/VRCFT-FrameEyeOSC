@@ -57,7 +57,8 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
 
         var config = LoadConfig();
 
-        // Wait briefly for packets: VRCFT kills a module process that stays silent for 60 s in Initialize.
+        // Bind now, and wait for packets only briefly (see below): VRCFT kills a module process that stays silent for 60 s
+        // in Initialize.
         try
         {
             _receiver = CreateReceiver(config.Port, OnBadPacket);
@@ -92,7 +93,8 @@ public sealed class FrameEyeOscModule : ExtTrackingModule
 
         _writer.Write(UnifiedTracking.Data, EyeFrame.Neutral);
 
-        // Without frameeyeosc (the Steam Frame is off or another headset is in use), leave the eyes to other modules.
+        // With claimWithoutPackets off and no frameeyeosc (the Steam Frame is off or another headset is in use), leave the
+        // eyes to other modules.
         if (!config.ClaimWithoutPackets && !WaitForFirstPacket(_receiver))
         {
             Logger.LogInformation(

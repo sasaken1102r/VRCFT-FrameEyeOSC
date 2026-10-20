@@ -79,52 +79,15 @@ public class ModuleTests
         }
     }
 
-    [Fact]
-    public void Without_packets_at_startup_it_leaves_the_eye_slot_to_other_modules()
-    {
-        var socket = new FakeDatagramSocket();
-        var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
-
-        Assert.Equal((false, false), module.Initialize(true, false));
-        Assert.Contains(_log.Lines, l => l.Level == LogLevel.Information && l.Message.StartsWith("No packets from frameeyeosc within"));
-
-        // Packets arriving later are not read: the receiver is closed, and Update just waits.
-        socket.Enqueue(Packet(1, 0.5f));
-        module.Update();
-        Assert.Equal(1, socket.Available);
-        module.Teardown();
-    }
-
-    [Fact]
-    public void A_packet_at_startup_claims_the_eyes_and_is_applied()
-    {
-        var socket = new FakeDatagramSocket();
-        socket.Enqueue(Packet(1, 0.5f));
-        var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
-
-        Assert.Equal((true, false), module.Initialize(true, false));
-        Assert.Equal(0.5f, UnifiedTracking.Data.Eye.Left.Gaze.x);
-        Assert.Contains(_log.Lines, l => l.Message.StartsWith("Receiving from frameeyeosc"));
-        module.Teardown();
-    }
-
-    [Fact]
-    public void ClaimWithoutPackets_claims_the_eyes_without_waiting()
+    /// <summary>Runs <paramref name="body"/> with the config file next to FrameEyeOSC.dll set to <paramref name="json"/>.</summary>
+    private static void WithConfig(string json, Action body)
     {
         var configPath = ConfigPath();
         Assert.False(File.Exists(configPath), $"{configPath} is left over");
-        File.WriteAllText(configPath, """{ "claimWithoutPackets": true }""");
+        File.WriteAllText(configPath, json);
         try
         {
-            var socket = new FakeDatagramSocket();
-            var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
-            Assert.Equal((true, false), module.Initialize(true, false));
-            Assert.Equal(0f, UnifiedTracking.Data.Eye.Left.Gaze.x); // relaxed until frameeyeosc sends
-
-            socket.Enqueue(Packet(1, 0.25f));
-            module.Update();
-            Assert.Equal(0.25f, UnifiedTracking.Data.Eye.Left.Gaze.x);
-            module.Teardown();
+            body();
         }
         finally
         {
@@ -133,14 +96,61 @@ public class ModuleTests
     }
 
     [Fact]
+    public void Without_claimWithoutPackets_and_packets_at_startup_it_leaves_the_eye_slot_to_other_modules() =>
+        WithConfig("""{ "claimWithoutPackets": false }""", () =>
+        {
+            var socket = new FakeDatagramSocket();
+            var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
+
+            Assert.Equal((false, false), module.Initialize(true, false));
+            Assert.Contains(_log.Lines, l => l.Level == LogLevel.Information && l.Message.StartsWith("No packets from frameeyeosc within"));
+
+            // Packets arriving later are not read: the receiver is closed, and Update just waits.
+            socket.Enqueue(Packet(1, 0.5f));
+            module.Update();
+            Assert.Equal(1, socket.Available);
+            module.Teardown();
+        });
+
+    [Fact]
+    public void Without_claimWithoutPackets_a_packet_at_startup_claims_the_eyes_and_is_applied() =>
+        WithConfig("""{ "claimWithoutPackets": false }""", () =>
+        {
+            var socket = new FakeDatagramSocket();
+            socket.Enqueue(Packet(1, 0.5f));
+            var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
+
+            Assert.Equal((true, false), module.Initialize(true, false));
+            Assert.Equal(0.5f, UnifiedTracking.Data.Eye.Left.Gaze.x);
+            Assert.Contains(_log.Lines, l => l.Message.StartsWith("Receiving from frameeyeosc"));
+            module.Teardown();
+        });
+
+    [Fact]
+    public void By_default_it_claims_the_eyes_without_waiting()
+    {
+        Assert.False(File.Exists(ConfigPath()), $"{ConfigPath()} is left over");
+        var socket = new FakeDatagramSocket();
+        var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket));
+        Assert.Equal((true, false), module.Initialize(true, false));
+        Assert.Equal(0f, UnifiedTracking.Data.Eye.Left.Gaze.x); // relaxed until frameeyeosc sends
+
+        socket.Enqueue(Packet(1, 0.25f));
+        module.Update();
+        Assert.Equal(0.25f, UnifiedTracking.Data.Eye.Left.Gaze.x);
+        module.Teardown();
+    }
+
+    [Fact]
     public void A_receiver_error_still_relaxes_the_eyes_after_the_timeout()
     {
         var socket = new FakeDatagramSocket();
         var time = new ManualTimeProvider();
         var module = NewModule((_, onBadPacket) => new FrameEyeOscReceiver(socket, onBadPacket, time));
+        Assert.Equal((true, false), module.Initialize(true, false));
 
         socket.Enqueue(Packet(1, 0.5f));
-        Assert.Equal((true, false), module.Initialize(true, false));
+        module.Update();
         Assert.Equal(0.5f, UnifiedTracking.Data.Eye.Left.Gaze.x);
 
         // The socket breaks: Poll throws every time.

@@ -8,15 +8,15 @@ namespace FrameEyeOSC;
 /// </summary>
 /// <param name="Port">The UDP port to listen on.</param>
 /// <param name="ClaimWithoutPackets">
-/// Take VRCFT's eye tracking slot even when no packet arrives while VRCFT starts. Off (the default): without packets the
-/// slot is left to other eye modules, e.g. one for a different headset.
+/// Take VRCFT's eye tracking slot at once, even when no packet arrives while VRCFT starts (the default). Off: without
+/// packets the slot is left to other eye modules, e.g. one for a different headset.
 /// </param>
-public sealed record FrameEyeOscConfig(int Port, bool ClaimWithoutPackets = false)
+public sealed record FrameEyeOscConfig(int Port, bool ClaimWithoutPackets = true)
 {
     /// <summary>The config file name.</summary>
     public const string FileName = "FrameEyeOSCConfig.json";
 
-    /// <summary>The defaults (port 11112, eyes only with packets).</summary>
+    /// <summary>The defaults (port 11112, eyes taken at once).</summary>
     public static FrameEyeOscConfig Default { get; } = new(FrameEyeOscReceiver.DefaultPort);
 
     /// <summary>Reads the config, falling back to the defaults for a missing file and, with a warning, a bad one.</summary>

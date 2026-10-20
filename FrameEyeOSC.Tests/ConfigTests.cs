@@ -3,10 +3,11 @@ namespace FrameEyeOSC.Tests;
 public class ConfigTests
 {
     [Theory]
-    [InlineData("{\"port\": 12000}", 12000, false)]
-    [InlineData("{ \"Port\": 9100, \"other\": true }", 9100, false)]
-    [InlineData("{}", 11112, false)]
-    [InlineData("{ // comment\n \"port\": 11113, }", 11113, false)]
+    [InlineData("{\"port\": 12000}", 12000, true)]
+    [InlineData("{ \"Port\": 9100, \"other\": true }", 9100, true)]
+    [InlineData("{}", 11112, true)]
+    [InlineData("{ // comment\n \"port\": 11113, }", 11113, true)]
+    [InlineData("{\"claimWithoutPackets\": false}", 11112, false)]
     [InlineData("{\"claimWithoutPackets\": true}", 11112, true)]
     [InlineData("{\"ClaimWithoutPackets\": false, \"port\": 12001}", 12001, false)]
     public void Valid_files(string json, int port, bool claimWithoutPackets)
